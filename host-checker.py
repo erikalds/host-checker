@@ -45,6 +45,10 @@ HostChecker has checked the following hosts:
         raise Exception("sendmail failed.")
 
 def main(argv):
+    if '--unittest' in argv:
+        argv.remove('--unittest')
+        return unittest.main()
+
     hosts = ['superoffice.conoptica.com',
              'conoptica.dyndns.org',
              'argabuthon.dyndns.org',
