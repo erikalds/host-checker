@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+import unittest
+from io import StringIO
+
 def start_ping(host):
     import subprocess
     proc = subprocess.Popen(['ping', '-c', '5', '-q', host],
@@ -44,15 +47,66 @@ HostChecker has checked the following hosts:
     if proc.wait():
         raise Exception("sendmail failed.")
 
+
+class Config:
+    def __init__(self):
+        self._hosts = []
+
+    def read_file(self, fp):
+        from configparser import ConfigParser
+        parser = ConfigParser()
+        parser.read_file(fp)
+        if 'General' in parser:
+            hostsline = parser['General'].get('Hosts', '')
+            self._hosts = [h.strip() for h in hostsline.split(",")]
+
+    def hosts(self):
+        return self._hosts
+
+class ConfigTest(unittest.TestCase):
+    def test_read_host_from_file(self):
+        config = Config()
+        config.read_file(StringIO("""[General]
+Hosts=host.domain.com"""))
+        self.assertEqual(['host.domain.com'], config.hosts())
+        config = Config()
+        config.read_file(StringIO("""[General]
+Hosts=anotherhost.domain.com"""))
+        self.assertEqual(['anotherhost.domain.com'], config.hosts())
+
+    def test_read_hosts_from_file(self):
+        config = Config()
+        config.read_file(StringIO("""[General]
+Hosts=host.domain.com, anotherhost.domain.com"""))
+        self.assertSetEqual(set(['host.domain.com', 'anotherhost.domain.com']),
+                            set(config.hosts()))
+
+    def test_second_read_overwrites_first(self):
+        config = Config()
+        config.read_file(StringIO("""[General]
+Hosts=host.domain.com"""))
+        config.read_file(StringIO("""[General]
+Hosts=anotherhost.domain.com"""))
+        self.assertEqual(['anotherhost.domain.com'], config.hosts())
+
+    def test_handles_missing_hosts(self):
+        config = Config()
+        config.read_file(StringIO(""))
+        self.assertEqual([], config.hosts())
+
+
 def main(argv):
     if '--unittest' in argv:
         argv.remove('--unittest')
         return unittest.main()
 
-    hosts = ['superoffice.conoptica.com',
-             'conoptica.dyndns.org',
-             'argabuthon.dyndns.org',
-             'argabuthon.hopto.org']
+    config = Config()
+    for filename in ('/etc/host-checker', '~/.host-checker'):
+        if os.path.exists(filename):
+            with open(filename, 'r') as fp:
+                config.read_file(fp)
+
+    hosts = config.hosts()
 
     host_ping = dict([(host, start_ping(host)) for host in hosts])
     failures = dict()
