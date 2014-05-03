@@ -2,6 +2,7 @@
 
 import unittest
 from io import StringIO
+import os
 
 def start_ping(host):
     import subprocess
@@ -63,6 +64,16 @@ class Config:
     def hosts(self):
         return self._hosts
 
+    def read_argv(self, argv):
+        import argparse
+        parser = argparse.ArgumentParser(description="Check if hosts are alive")
+        parser.add_argument('-H', '--hosts', dest='hosts', required=False,
+                            type=lambda s : [x.strip() for x in s.split(",")],
+                            help='Comma separated list of hostnames to check')
+        arguments = parser.parse_args(argv[1:])
+        if arguments.hosts:
+            self._hosts = arguments.hosts
+
 class ConfigTest(unittest.TestCase):
     def test_read_host_from_file(self):
         config = Config()
@@ -94,6 +105,42 @@ Hosts=anotherhost.domain.com"""))
         config.read_file(StringIO(""))
         self.assertEqual([], config.hosts())
 
+    def test_reads_short_host_from_argv(self):
+        config = Config()
+        config.read_argv('host-checker.py -H host.domain.com'.split())
+        self.assertEqual(['host.domain.com'], config.hosts())
+
+    def test_reads_long_host_from_argv(self):
+        config = Config()
+        config.read_argv('host-checker.py --hosts anotherhost.domain.com'.split())
+        self.assertEqual(['anotherhost.domain.com'], config.hosts())
+
+    def test_argv_overrides_config_file(self):
+        config = Config()
+        config.read_file(StringIO("""[General]
+Hosts=h0.d.com, h1.d.com"""))
+        config.read_argv('host-checker.py --hosts host.dom.com'.split())
+        self.assertEqual(['host.dom.com'], config.hosts())
+
+    def test_argv_missing_hosts_does_not_override_config_file(self):
+        config = Config()
+        config.read_file(StringIO("""[General]
+Hosts=h0.d.com, h1.d.com"""))
+        config.read_argv('host-checker.py'.split())
+        self.assertSetEqual(set(['h0.d.com', 'h1.d.com']), set(config.hosts()))
+
+    def test_reads_multiple_hosts_from_argv(self):
+        config = Config()
+        config.read_argv('prog -H h0.d.com,h1.d.com,h2.d.com'.split())
+        self.assertSetEqual(set('h0.d.com h1.d.com h2.d.com'.split()),
+                            set(config.hosts()))
+
+    def test_handles_multiple_hosts_from_argv_with_spaces(self):
+        config = Config()
+        config.read_argv(['prog', '-H', 'h0.d.com, h1.d.com, h2.d.com'])
+        self.assertSetEqual(set('h0.d.com h1.d.com h2.d.com'.split()),
+                            set(config.hosts()))
+
 
 def main(argv):
     if '--unittest' in argv:
@@ -105,6 +152,8 @@ def main(argv):
         if os.path.exists(filename):
             with open(filename, 'r') as fp:
                 config.read_file(fp)
+
+    config.read_argv(argv)
 
     hosts = config.hosts()
 
