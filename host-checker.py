@@ -259,10 +259,10 @@ def main(argv):
 
     hosts = config.hosts()
 
-    host_ping = dict([(host, start_ping(host)) for host in hosts])
+    ping_procs = dict([(host, start_ping(host)) for host in hosts])
     failures = dict()
-    for host in host_ping:
-        success, msg = check_ping(host, host_ping[host])
+    for host in ping_procs:
+        success, msg = check_ping(host, ping_procs[host])
         if not success:
             print("Check host %s failed: %s" % (host, msg))
             failures[host] = msg
