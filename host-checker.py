@@ -39,7 +39,7 @@ HostChecker has checked the following hosts:
     mimetext = MIMEText(msg)
     mimetext['Subject'] = "HostChecker report"
     mimetext['From'] = "HostChecker"
-    mimetext['To'] = "; ".join(recipients)
+    mimetext['To'] = ", ".join(recipients)
 
     mailsender.send(mimetext)
 
