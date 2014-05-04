@@ -52,6 +52,13 @@ HostChecker has checked the following hosts:
 class Config:
     def __init__(self):
         self._hosts = []
+        self._recipients = []
+
+    def hosts(self):
+        return self._hosts
+
+    def recipients(self):
+        return self._recipients
 
     def read_file(self, fp):
         from configparser import ConfigParser
@@ -59,10 +66,11 @@ class Config:
         parser.read_file(fp)
         if 'General' in parser:
             hostsline = parser['General'].get('Hosts', '')
-            self._hosts = [h.strip() for h in hostsline.split(",")]
-
-    def hosts(self):
-        return self._hosts
+            if hostsline:
+                self._hosts = [h.strip() for h in hostsline.split(",")]
+            recipients = parser['General'].get('Recipients')
+            if recipients:
+                self._recipients = [r.strip() for r in recipients.split(",")]
 
     def read_argv(self, argv):
         import argparse
@@ -70,9 +78,15 @@ class Config:
         parser.add_argument('-H', '--hosts', dest='hosts', required=False,
                             type=lambda s : [x.strip() for x in s.split(",")],
                             help='Comma separated list of hostnames to check')
+        parser.add_argument('-r', '--recipients', dest='recipients',
+                            type=lambda s : [x.strip() for x in s.split(",")],
+                            help='Comma separated list of recipients to receive'
+                                 ' e-mail notifications')
         arguments = parser.parse_args(argv[1:])
         if arguments.hosts:
             self._hosts = arguments.hosts
+        if arguments.recipients:
+            self._recipients = arguments.recipients
 
 class ConfigTest(unittest.TestCase):
     def test_read_host_from_file(self):
@@ -102,8 +116,14 @@ Hosts=anotherhost.domain.com"""))
 
     def test_handles_missing_hosts(self):
         config = Config()
-        config.read_file(StringIO(""))
+        config.read_file(StringIO("[General]\nRecipients=a@b.com"))
         self.assertEqual([], config.hosts())
+
+    def test_missing_hosts_does_not_override(self):
+        config = Config()
+        config.read_file(StringIO("[General]\nHosts=b.com"))
+        config.read_file(StringIO("[General]\nRecipients=a@b.com"))
+        self.assertEqual(['b.com'], config.hosts())
 
     def test_reads_short_host_from_argv(self):
         config = Config()
@@ -140,6 +160,88 @@ Hosts=h0.d.com, h1.d.com"""))
         config.read_argv(['prog', '-H', 'h0.d.com, h1.d.com, h2.d.com'])
         self.assertSetEqual(set('h0.d.com h1.d.com h2.d.com'.split()),
                             set(config.hosts()))
+
+    def test_reads_mail_recipients_from_config_file(self):
+        config = Config()
+        config.read_file(StringIO("""[General]
+Recipients=Erik Åldstedt Sund <erikalds@gmail.com>"""))
+        self.assertListEqual(['Erik Åldstedt Sund <erikalds@gmail.com>'],
+                             config.recipients())
+        config.read_file(StringIO("""[General]
+Recipients=erikalds@gmail.com"""))
+        self.assertListEqual(['erikalds@gmail.com'], config.recipients())
+
+    def test_reads_comma_separated_list_of_mail_recipients(self):
+        config = Config()
+        config.read_file(StringIO("""[General]
+Recipients=Hei Hå <hei.haa@gmail.com>,Ha Det <ha.det@gmail.com>"""))
+        self.assertSetEqual(set(['Hei Hå <hei.haa@gmail.com>',
+                                 'Ha Det <ha.det@gmail.com>']),
+                            set(config.recipients()))
+
+    def test_strips_spaces_from_list_of_recipients(self):
+        config = Config()
+        config.read_file(StringIO("""[General]
+Recipients= Hei Hå <hei.haa@gmail.com> , Ha Det <ha.det@gmail.com> """))
+        self.assertSetEqual(set(['Hei Hå <hei.haa@gmail.com>',
+                                 'Ha Det <ha.det@gmail.com>']),
+                            set(config.recipients()))
+
+    def test_handles_missing_recipients_from_config_file(self):
+        config = Config()
+        config.read_file(StringIO("""[General]
+Hosts=google.com"""))
+        self.assertListEqual([], config.recipients())
+
+    def test_missing_recipients_does_not_override(self):
+        config = Config()
+        config.read_file(StringIO("""[General]
+Recipients=e@b.com"""))
+        config.read_file(StringIO("""[General]
+Hosts=google.com"""))
+        self.assertListEqual(['e@b.com'], config.recipients())
+
+    def test_reads_short_recipients_from_argv(self):
+        config = Config()
+        config.read_argv('prog -r a@b.com'.split())
+        self.assertEqual(['a@b.com'], config.recipients())
+
+    def test_reads_long_recipients_from_argv(self):
+        config = Config()
+        config.read_argv('prog --recipients a@b.com'.split())
+        self.assertEqual(['a@b.com'], config.recipients())
+
+    def test_reads_another_recipient_from_argv(self):
+        config = Config()
+        config.read_argv('prog -r b@a.com'.split())
+        self.assertEqual(['b@a.com'], config.recipients())
+
+    def test_reads_comma_separated_recipients_from_argv(self):
+        config = Config()
+        config.read_argv('prog -r b@a.com,a@b.com'.split())
+        self.assertSetEqual(set(['a@b.com', 'b@a.com']),
+                            set(config.recipients()))
+
+    def test_reads_comma_separated_recipients_with_spaces_from_argv(self):
+        config = Config()
+        config.read_argv(['prog', '-r', ' b@a.com , a@b.com '])
+        self.assertSetEqual(set(['a@b.com', 'b@a.com']),
+                            set(config.recipients()))
+
+    def test_argv_recipients_overrides_config_file(self):
+        config = Config()
+        config.read_file(StringIO("""[General]
+Recipients=a@b.com"""))
+        config.read_argv('prog -r b@a.com'.split())
+        self.assertEqual(['b@a.com'], config.recipients())
+
+    def test_missing_argv_recipients_does_not_override_config_file(self):
+        config = Config()
+        config.read_file(StringIO("""[General]
+Recipients=a@b.com"""))
+        config.read_argv('prog --hosts a.com'.split())
+        self.assertEqual(['a@b.com'], config.recipients())
+
 
 
 def main(argv):
