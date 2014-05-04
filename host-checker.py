@@ -41,7 +41,7 @@ HostChecker has checked the following hosts:
     mimetext['From'] = "HostChecker"
     mimetext['To'] = ", ".join(recipients)
 
-    mailsender.send(mimetext)
+    mailsender.send(recipients, mimetext)
 
 
 class sendmail_MailSender:
