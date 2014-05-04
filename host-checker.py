@@ -20,7 +20,7 @@ def check_ping(host, proc):
             return (False, "%s%% packet loss." % (mo.group(1)))
     return (not exitcode, "stdout: %s, stderr: %s" % (stdout, stderr) if exitcode else "")
 
-def send_email_report(hosts, failures):
+def send_email_report(hosts, failures, recipients):
     import smtplib
     from email.mime.text import MIMEText
     msg = """HostChecker report
@@ -37,16 +37,18 @@ HostChecker has checked the following hosts:
     msg += "\n\nBest regards,\nHostChecker"
     mimetext = MIMEText(msg)
     mimetext['Subject'] = "HostChecker report"
-    mimetext['From'] = "HostChecker at argabuthon <erikalds@argabuthon.dyndns.org>"
-    mimetext['To'] = "Erik Sund <erikalds@argabuthon.dyndns.org>"
+    mimetext['From'] = "HostChecker"
+    mimetext['To'] = "; ".join(recipients)
     print("Sending message: %s" % mimetext)
 
     import subprocess
-    proc = subprocess.Popen(["/usr/sbin/sendmail", "erikalds@argabuthon.dyndns.org"], stdin=subprocess.PIPE)
-    proc.stdin.write(str(mimetext).encode('utf-8'))
-    proc.stdin.close()
-    if proc.wait():
-        raise Exception("sendmail failed.")
+    for recipient in recipients:
+        proc = subprocess.Popen(["/usr/sbin/sendmail", recipient],
+                                stdin=subprocess.PIPE)
+        proc.stdin.write(str(mimetext).encode('utf-8'))
+        proc.stdin.close()
+        if proc.wait():
+            raise Exception("sendmail failed.")
 
 
 class Config:
@@ -269,7 +271,7 @@ def main(argv):
         else:
             print("Host %s is alive" % host)
 
-    send_email_report(hosts, failures)
+    send_email_report(hosts, failures, config.recipients())
     return 0
 
 if __name__ == '__main__':
