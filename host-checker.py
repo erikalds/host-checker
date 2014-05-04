@@ -65,7 +65,7 @@ class smtplib_MailSender:
 
     def send(self, recipients, mimetext):
         import smtplib
-        server = smptlib.SMTP(self.server_address)
+        server = smtplib.SMTP(self.server_address)
         server.send_message(mimetext)
         server.quit()
 
