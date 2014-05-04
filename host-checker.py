@@ -122,191 +122,167 @@ class Config:
             self._recipients = arguments.recipients
 
 class ConfigTest(unittest.TestCase):
+    def setUp(self):
+        self.config = Config()
+
+    def read_config(self, **kwargs):
+        gen_sect = ""
+        if 'hosts' in kwargs:
+            gen_sect += 'Hosts = %(hosts)s\n'
+        if 'recipients' in kwargs:
+            gen_sect += 'Recipients = %(recipients)s\n'
+
+        if gen_sect:
+            gen_sect = '[General]\n' + gen_sect
+
+        mailsender_sect = ""
+        if 'mailsender' in kwargs:
+            mailsender_sect += 'Type = %(mailsender)s\n'
+        if 'address' in kwargs:
+            mailsender_sect += 'Address = %(address)s\n'
+
+        if mailsender_sect:
+            mailsender_sect = '[MailSender]\n' + mailsender_sect
+
+        self.config.read_file(StringIO((gen_sect + mailsender_sect) % kwargs))
+
     def test_read_host_from_file(self):
-        config = Config()
-        config.read_file(StringIO("""[General]
-Hosts=host.domain.com"""))
-        self.assertEqual(['host.domain.com'], config.hosts())
-        config = Config()
-        config.read_file(StringIO("""[General]
-Hosts=anotherhost.domain.com"""))
-        self.assertEqual(['anotherhost.domain.com'], config.hosts())
+        self.read_config(hosts='host.domain.com')
+        self.assertEqual(['host.domain.com'], self.config.hosts())
+        self.config = Config()
+        self.read_config(hosts="anotherhost.domain.com")
+        self.assertEqual(['anotherhost.domain.com'], self.config.hosts())
 
     def test_read_hosts_from_file(self):
-        config = Config()
-        config.read_file(StringIO("""[General]
-Hosts=host.domain.com, anotherhost.domain.com"""))
+        self.read_config(hosts="host.domain.com, anotherhost.domain.com")
         self.assertSetEqual(set(['host.domain.com', 'anotherhost.domain.com']),
-                            set(config.hosts()))
+                            set(self.config.hosts()))
 
     def test_second_read_overwrites_first(self):
-        config = Config()
-        config.read_file(StringIO("""[General]
-Hosts=host.domain.com"""))
-        config.read_file(StringIO("""[General]
-Hosts=anotherhost.domain.com"""))
-        self.assertEqual(['anotherhost.domain.com'], config.hosts())
+        self.read_config(hosts='host.domain.com')
+        self.read_config(hosts='anotherhost.domain.com')
+        self.assertEqual(['anotherhost.domain.com'], self.config.hosts())
 
     def test_handles_missing_hosts(self):
-        config = Config()
-        config.read_file(StringIO("[General]\nRecipients=a@b.com"))
-        self.assertEqual([], config.hosts())
+        self.read_config(recipients='a@b.com')
+        self.assertEqual([], self.config.hosts())
 
     def test_missing_hosts_does_not_override(self):
-        config = Config()
-        config.read_file(StringIO("[General]\nHosts=b.com"))
-        config.read_file(StringIO("[General]\nRecipients=a@b.com"))
-        self.assertEqual(['b.com'], config.hosts())
+        self.read_config(hosts='b.com')
+        self.read_config(recipients='a@b.com')
+        self.assertEqual(['b.com'], self.config.hosts())
 
     def test_reads_short_host_from_argv(self):
-        config = Config()
-        config.read_argv('host-checker.py -H host.domain.com'.split())
-        self.assertEqual(['host.domain.com'], config.hosts())
+        self.config.read_argv('host-checker.py -H host.domain.com'.split())
+        self.assertEqual(['host.domain.com'], self.config.hosts())
 
     def test_reads_long_host_from_argv(self):
-        config = Config()
-        config.read_argv('host-checker.py --hosts anotherhost.domain.com'.split())
-        self.assertEqual(['anotherhost.domain.com'], config.hosts())
+        self.config.read_argv('prog --hosts anotherhost.domain.com'.split())
+        self.assertEqual(['anotherhost.domain.com'], self.config.hosts())
 
     def test_argv_overrides_config_file(self):
-        config = Config()
-        config.read_file(StringIO("""[General]
-Hosts=h0.d.com, h1.d.com"""))
-        config.read_argv('host-checker.py --hosts host.dom.com'.split())
-        self.assertEqual(['host.dom.com'], config.hosts())
+        self.read_config(hosts='h0.d.com, h1.d.com')
+        self.config.read_argv('host-checker.py --hosts host.dom.com'.split())
+        self.assertEqual(['host.dom.com'], self.config.hosts())
 
     def test_argv_missing_hosts_does_not_override_config_file(self):
-        config = Config()
-        config.read_file(StringIO("""[General]
-Hosts=h0.d.com, h1.d.com"""))
-        config.read_argv('host-checker.py'.split())
-        self.assertSetEqual(set(['h0.d.com', 'h1.d.com']), set(config.hosts()))
+        self.read_config(hosts='h0.d.com, h1.d.com')
+        self.config.read_argv('host-checker.py'.split())
+        self.assertSetEqual(set(['h0.d.com', 'h1.d.com']), set(self.config.hosts()))
 
     def test_reads_multiple_hosts_from_argv(self):
-        config = Config()
-        config.read_argv('prog -H h0.d.com,h1.d.com,h2.d.com'.split())
+        self.config.read_argv('prog -H h0.d.com,h1.d.com,h2.d.com'.split())
         self.assertSetEqual(set('h0.d.com h1.d.com h2.d.com'.split()),
-                            set(config.hosts()))
+                            set(self.config.hosts()))
 
     def test_handles_multiple_hosts_from_argv_with_spaces(self):
-        config = Config()
-        config.read_argv(['prog', '-H', 'h0.d.com, h1.d.com, h2.d.com'])
+        self.config.read_argv(['prog', '-H', 'h0.d.com, h1.d.com, h2.d.com'])
         self.assertSetEqual(set('h0.d.com h1.d.com h2.d.com'.split()),
-                            set(config.hosts()))
+                            set(self.config.hosts()))
 
     def test_reads_mail_recipients_from_config_file(self):
-        config = Config()
-        config.read_file(StringIO("""[General]
-Recipients=Erik Åldstedt Sund <erikalds@gmail.com>"""))
+        self.read_config(recipients='Erik Åldstedt Sund <erikalds@gmail.com>')
         self.assertListEqual(['Erik Åldstedt Sund <erikalds@gmail.com>'],
-                             config.recipients())
-        config.read_file(StringIO("""[General]
-Recipients=erikalds@gmail.com"""))
-        self.assertListEqual(['erikalds@gmail.com'], config.recipients())
+                             self.config.recipients())
+        self.read_config(recipients='erikalds@gmail.com')
+        self.assertListEqual(['erikalds@gmail.com'], self.config.recipients())
 
     def test_reads_comma_separated_list_of_mail_recipients(self):
-        config = Config()
-        config.read_file(StringIO("""[General]
-Recipients=Hei Hå <hei.haa@gmail.com>,Ha Det <ha.det@gmail.com>"""))
+        self.read_config(recipients='Hei Hå <hei.haa@gmail.com>,Ha Det <ha.det@gmail.com>')
         self.assertSetEqual(set(['Hei Hå <hei.haa@gmail.com>',
                                  'Ha Det <ha.det@gmail.com>']),
-                            set(config.recipients()))
+                            set(self.config.recipients()))
 
     def test_strips_spaces_from_list_of_recipients(self):
-        config = Config()
-        config.read_file(StringIO("""[General]
-Recipients= Hei Hå <hei.haa@gmail.com> , Ha Det <ha.det@gmail.com> """))
+        self.read_config(recipients=' Hei Hå <hei.haa@gmail.com> , Ha Det <ha.det@gmail.com> ')
         self.assertSetEqual(set(['Hei Hå <hei.haa@gmail.com>',
                                  'Ha Det <ha.det@gmail.com>']),
-                            set(config.recipients()))
+                            set(self.config.recipients()))
 
     def test_handles_missing_recipients_from_config_file(self):
-        config = Config()
-        config.read_file(StringIO("""[General]
-Hosts=google.com"""))
-        self.assertListEqual([], config.recipients())
+        self.read_config(hosts='google.com')
+        self.assertListEqual([], self.config.recipients())
 
     def test_missing_recipients_does_not_override(self):
-        config = Config()
-        config.read_file(StringIO("""[General]
-Recipients=e@b.com"""))
-        config.read_file(StringIO("""[General]
-Hosts=google.com"""))
-        self.assertListEqual(['e@b.com'], config.recipients())
+        self.read_config(recipients='e@b.com')
+        self.read_config(hosts='google.com')
+        self.assertListEqual(['e@b.com'], self.config.recipients())
 
     def test_reads_short_recipients_from_argv(self):
-        config = Config()
-        config.read_argv('prog -r a@b.com'.split())
-        self.assertEqual(['a@b.com'], config.recipients())
+        self.config.read_argv('prog -r a@b.com'.split())
+        self.assertEqual(['a@b.com'], self.config.recipients())
 
     def test_reads_long_recipients_from_argv(self):
-        config = Config()
-        config.read_argv('prog --recipients a@b.com'.split())
-        self.assertEqual(['a@b.com'], config.recipients())
+        self.config.read_argv('prog --recipients a@b.com'.split())
+        self.assertEqual(['a@b.com'], self.config.recipients())
 
     def test_reads_another_recipient_from_argv(self):
-        config = Config()
-        config.read_argv('prog -r b@a.com'.split())
-        self.assertEqual(['b@a.com'], config.recipients())
+        self.config.read_argv('prog -r b@a.com'.split())
+        self.assertEqual(['b@a.com'], self.config.recipients())
 
     def test_reads_comma_separated_recipients_from_argv(self):
-        config = Config()
-        config.read_argv('prog -r b@a.com,a@b.com'.split())
+        self.config.read_argv('prog -r b@a.com,a@b.com'.split())
         self.assertSetEqual(set(['a@b.com', 'b@a.com']),
-                            set(config.recipients()))
+                            set(self.config.recipients()))
 
     def test_reads_comma_separated_recipients_with_spaces_from_argv(self):
-        config = Config()
-        config.read_argv(['prog', '-r', ' b@a.com , a@b.com '])
+        self.config.read_argv(['prog', '-r', ' b@a.com , a@b.com '])
         self.assertSetEqual(set(['a@b.com', 'b@a.com']),
-                            set(config.recipients()))
+                            set(self.config.recipients()))
 
     def test_argv_recipients_overrides_config_file(self):
-        config = Config()
-        config.read_file(StringIO("""[General]
-Recipients=a@b.com"""))
-        config.read_argv('prog -r b@a.com'.split())
-        self.assertEqual(['b@a.com'], config.recipients())
+        self.read_config(recipients='a@b.com')
+        self.config.read_argv('prog -r b@a.com'.split())
+        self.assertEqual(['b@a.com'], self.config.recipients())
 
     def test_missing_argv_recipients_does_not_override_config_file(self):
-        config = Config()
-        config.read_file(StringIO("""[General]
-Recipients=a@b.com"""))
-        config.read_argv('prog --hosts a.com'.split())
-        self.assertEqual(['a@b.com'], config.recipients())
+        self.read_config(recipients='a@b.com')
+        self.config.read_argv('prog --hosts a.com'.split())
+        self.assertEqual(['a@b.com'], self.config.recipients())
 
     def test_reads_smtplib_mailsender_from_config_file(self):
-        config = Config()
-        config.read_file(StringIO("""[MailSender]
-Type=smtplib"""))
+        self.read_config(mailsender='smtplib')
         self.assertEqual(smtplib_MailSender,
-                         type(config.mailsender()))
+                         type(self.config.mailsender()))
 
     def test_reads_sendmail_mailsender_from_config_file(self):
-        config = Config()
-        config.read_file(StringIO("""[MailSender]
-Type=sendmail"""))
+        self.read_config(mailsender='sendmail')
         self.assertEqual(sendmail_MailSender,
-                         type(config.mailsender()))
+                         type(self.config.mailsender()))
 
     def test_smtplib_mailsender_server_is_localhost_by_default(self):
-        config = Config()
-        config.read_file(StringIO("""[MailSender]
-Type=smtplib"""))
-        self.assertEqual('localhost', config.mailsender().server_address)
+        self.read_config(mailsender='smtplib')
+        self.assertEqual('localhost', self.config.mailsender().server_address)
 
     def test_smtplib_mailsender_reads_server_from_config_file(self):
-        config = Config()
-        config.read_file(StringIO("""[MailSender]
-Type=smtplib
-Address=smtp.abc.com"""))
-        self.assertEqual('smtp.abc.com', config.mailsender().server_address)
+        self.read_config(mailsender='smtplib', address='smtp.abc.com')
+        self.assertEqual('smtp.abc.com',
+                         self.config.mailsender().server_address)
 
     def test_default_mailsender_is_sendmail(self):
-        config = Config()
-        config.read_file(StringIO(""))
+        self.read_config()
         self.assertEqual(sendmail_MailSender,
-                         type(config.mailsender()))
+                         type(self.config.mailsender()))
 
 
 def main(argv):
