@@ -20,7 +20,7 @@ def check_ping(host, proc):
             return (False, "%s%% packet loss." % (mo.group(1)))
     return (not exitcode, "stdout: %s, stderr: %s" % (stdout, stderr) if exitcode else "")
 
-def send_email_report(hosts, failures, recipients):
+def send_email_report(hosts, failures, recipients, mailsender):
     import smtplib
     from email.mime.text import MIMEText
     msg = """HostChecker report
@@ -35,32 +35,55 @@ HostChecker has checked the following hosts:
         for host in failures:
             msg += " - %s failed with the following error: %s\n" % (host, failures[host])
     msg += "\n\nBest regards,\nHostChecker"
+
     mimetext = MIMEText(msg)
     mimetext['Subject'] = "HostChecker report"
     mimetext['From'] = "HostChecker"
     mimetext['To'] = "; ".join(recipients)
-    print("Sending message: %s" % mimetext)
 
-    import subprocess
-    for recipient in recipients:
-        proc = subprocess.Popen(["/usr/sbin/sendmail", recipient],
-                                stdin=subprocess.PIPE)
-        proc.stdin.write(str(mimetext).encode('utf-8'))
-        proc.stdin.close()
-        if proc.wait():
-            raise Exception("sendmail failed.")
+    mailsender.send(mimetext)
+
+
+class sendmail_MailSender:
+    def __init__(self):
+        pass
+
+    def send(self, recipients, mimetext):
+        import subprocess
+        for recipient in recipients:
+            proc = subprocess.Popen(["/usr/sbin/sendmail", recipient],
+                                    stdin=subprocess.PIPE)
+            proc.stdin.write(str(mimetext).encode('utf-8'))
+            proc.stdin.close()
+            if proc.wait():
+                raise Exception("sendmail failed.")
+
+
+class smtplib_MailSender:
+    def __init__(self, smtp_server_address):
+        self.server_address = smtp_server_address
+
+    def send(self, recipients, mimetext):
+        import smtplib
+        server = smptlib.SMTP(self.server_address)
+        server.send_message(mimetext)
+        server.quit()
 
 
 class Config:
     def __init__(self):
         self._hosts = []
         self._recipients = []
+        self._sender = sendmail_MailSender()
 
     def hosts(self):
         return self._hosts
 
     def recipients(self):
         return self._recipients
+
+    def mailsender(self):
+        return self._sender
 
     def read_file(self, fp):
         from configparser import ConfigParser
@@ -73,6 +96,14 @@ class Config:
             recipients = parser['General'].get('Recipients')
             if recipients:
                 self._recipients = [r.strip() for r in recipients.split(",")]
+
+        if 'MailSender' in parser:
+            sendertype = parser['MailSender'].get('Type')
+            if sendertype == 'smtplib':
+                address = parser['MailSender'].get('Address', 'localhost')
+                self._sender = smtplib_MailSender(address)
+            elif sendertype == 'sendmail':
+                self._sender = sendmail_MailSender()
 
     def read_argv(self, argv):
         import argparse
@@ -244,6 +275,38 @@ Recipients=a@b.com"""))
         config.read_argv('prog --hosts a.com'.split())
         self.assertEqual(['a@b.com'], config.recipients())
 
+    def test_reads_smtplib_mailsender_from_config_file(self):
+        config = Config()
+        config.read_file(StringIO("""[MailSender]
+Type=smtplib"""))
+        self.assertEqual(smtplib_MailSender,
+                         type(config.mailsender()))
+
+    def test_reads_sendmail_mailsender_from_config_file(self):
+        config = Config()
+        config.read_file(StringIO("""[MailSender]
+Type=sendmail"""))
+        self.assertEqual(sendmail_MailSender,
+                         type(config.mailsender()))
+
+    def test_smtplib_mailsender_server_is_localhost_by_default(self):
+        config = Config()
+        config.read_file(StringIO("""[MailSender]
+Type=smtplib"""))
+        self.assertEqual('localhost', config.mailsender().server_address)
+
+    def test_smtplib_mailsender_reads_server_from_config_file(self):
+        config = Config()
+        config.read_file(StringIO("""[MailSender]
+Type=smtplib
+Address=smtp.abc.com"""))
+        self.assertEqual('smtp.abc.com', config.mailsender().server_address)
+
+    def test_default_mailsender_is_sendmail(self):
+        config = Config()
+        config.read_file(StringIO(""))
+        self.assertEqual(sendmail_MailSender,
+                         type(config.mailsender()))
 
 
 def main(argv):
@@ -271,7 +334,7 @@ def main(argv):
         else:
             print("Host %s is alive" % host)
 
-    send_email_report(hosts, failures, config.recipients())
+    send_email_report(hosts, failures, config.recipients(), config.mailsender())
     return 0
 
 if __name__ == '__main__':
