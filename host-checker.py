@@ -75,6 +75,7 @@ class Config:
         self._hosts = []
         self._recipients = []
         self._sender = sendmail_MailSender()
+        self._always_email = False
 
     def hosts(self):
         return self._hosts
@@ -84,6 +85,9 @@ class Config:
 
     def mailsender(self):
         return self._sender
+
+    def always_email(self):
+        return self._always_email
 
     def read_file(self, fp):
         from configparser import ConfigParser
@@ -96,6 +100,15 @@ class Config:
             recipients = parser['General'].get('Recipients')
             if recipients:
                 self._recipients = [r.strip() for r in recipients.split(",")]
+
+            always_email = parser['General'].get('AlwaysSendEmail')
+            if always_email:
+                try:
+                    self._always_email = bool(int(always_email))
+                except ValueError:
+                    import warnings
+                    warnings.warn("Valid values for AlwaysSendEmail is 0 or 1",
+                                  RuntimeWarning)
 
         if 'MailSender' in parser:
             sendertype = parser['MailSender'].get('Type')
@@ -115,11 +128,16 @@ class Config:
                             type=lambda s : [x.strip() for x in s.split(",")],
                             help='Comma separated list of recipients to receive'
                                  ' e-mail notifications')
+        parser.add_argument('-a', '--always-email', dest='always_email',
+                            required=False, action='store_true',
+                            help='Always send an e-mail report when the hosts '
+                            'check has finished, regardless of result')
         arguments = parser.parse_args(argv[1:])
         if arguments.hosts:
             self._hosts = arguments.hosts
         if arguments.recipients:
             self._recipients = arguments.recipients
+        self._always_email = arguments.always_email
 
 class ConfigTest(unittest.TestCase):
     def setUp(self):
@@ -131,6 +149,8 @@ class ConfigTest(unittest.TestCase):
             gen_sect += 'Hosts = %(hosts)s\n'
         if 'recipients' in kwargs:
             gen_sect += 'Recipients = %(recipients)s\n'
+        if 'always_email' in kwargs:
+            gen_sect += 'AlwaysSendEmail = %(always_email)s\n'
 
         if gen_sect:
             gen_sect = '[General]\n' + gen_sect
@@ -283,6 +303,31 @@ class ConfigTest(unittest.TestCase):
         self.read_config()
         self.assertEqual(sendmail_MailSender,
                          type(self.config.mailsender()))
+
+    def test_default_always_email_is_False(self):
+        self.read_config()
+        self.config.read_argv(['prog'])
+        self.assertFalse(self.config.always_email())
+
+    def test_reads_always_email_from_config_file(self):
+        self.read_config(always_email=1)
+        self.assertTrue(self.config.always_email())
+        self.read_config(always_email=0)
+        self.assertFalse(self.config.always_email())
+
+    def test_warns_when_always_email_is_malformed(self):
+        self.assertWarnsRegex(RuntimeWarning,
+                              "Valid values for AlwaysSendEmail is 0 or 1",
+                              self.read_config, always_email=True)
+        self.assertFalse(self.config.always_email())
+
+    def test_reads_short_always_email_from_argv(self):
+        self.config.read_argv('prog -a'.split())
+        self.assertTrue(self.config.always_email())
+
+    def test_reads_long_always_email_from_argv(self):
+        self.config.read_argv('prog --always-email'.split())
+        self.assertTrue(self.config.always_email())
 
 
 def main(argv):
