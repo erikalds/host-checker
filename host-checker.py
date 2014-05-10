@@ -355,7 +355,10 @@ def main(argv):
         else:
             print("Host %s is alive" % host)
 
-    send_email_report(hosts, failures, config.recipients(), config.mailsender())
+    if config.always_email() \
+       or failures:
+        send_email_report(hosts, failures, config.recipients(),
+                          config.mailsender())
     return 0
 
 if __name__ == '__main__':
