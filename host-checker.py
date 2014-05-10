@@ -137,7 +137,8 @@ class Config:
             self._hosts = arguments.hosts
         if arguments.recipients:
             self._recipients = arguments.recipients
-        self._always_email = arguments.always_email
+        if arguments.always_email:
+            self._always_email = arguments.always_email
 
 class ConfigTest(unittest.TestCase):
     def setUp(self):
@@ -327,6 +328,11 @@ class ConfigTest(unittest.TestCase):
 
     def test_reads_long_always_email_from_argv(self):
         self.config.read_argv('prog --always-email'.split())
+        self.assertTrue(self.config.always_email())
+
+    def test_no_always_email_on_argv_does_not_override_config_file(self):
+        self.read_config(always_email=1)
+        self.config.read_argv('prog'.split())
         self.assertTrue(self.config.always_email())
 
 
