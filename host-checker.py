@@ -65,7 +65,7 @@ class smtplib_MailSender:
 
     def send(self, recipients, mimetext):
         import smtplib
-        server = smptlib.SMTP(self.server_address)
+        server = smtplib.SMTP(self.server_address)
         server.send_message(mimetext)
         server.quit()
 
@@ -336,7 +336,8 @@ def main(argv):
         return unittest.main()
 
     config = Config()
-    for filename in ('/etc/host-checker', '~/.host-checker'):
+    for filename in ('/etc/host-checker',
+                     os.path.join(os.getenv('HOME'), '.host-checker')):
         if os.path.exists(filename):
             with open(filename, 'r') as fp:
                 config.read_file(fp)
